@@ -1,0 +1,219 @@
+---
+title: "ERRNI Notebook"
+output: html_notebook
+---
+
+Notebook version of original analysis scripts for Frizelle et al.
+The original scripts were uploaded to OSF around Dec 2016 https://osf.io/6mwyk/
+
+We start with 'script for figures and plots v5'
+
+NB This assumes we already have the file summary_allNov14_2016.xlsx
+
+# Script to produce information for Tables 1-3 and figs 2-3 (ERRNI data)
+# Added to Github on 24 Jun 2020
+###############################################################################
+Script by Paul Thompson December2016
+ Edited by Dorothy Bishop 21/12/16
+ Added script to create Table 4 22/12/16  Included scripts for sequential analysis of proportions 22/12/16
+```{r loadpackages}
+#library(XLConnect) - original scripts used XLConnect to read xls files
+#This is not working with current R version
+library(openxlsx) #This added 2020 as alternative package for reading xlsx files
+library(reshape2)
+library(doBy)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(lme4)
+library(car)
+```
+
+User will need to set paths to location of the raw files.  
+NB the final raw data folder should ONLY contain included raw data files. The script will list all files in that folder and load them sequentially.  
+The script also expects a folder ERRNI outputs where outputs will be stored.
+
+```{r setpaths}
+thisperson='dorothybishop' #change to pthompson if need be
+mymac=1 #set to 0 if not using a mac
+
+myfolder=paste("C:\\Users\\",thisperson,"\\Dropbox\\ERRNIanalysis2016\\ERRNI raw DATA\\final_041116",sep="")
+mybackfile=paste("C:\\Users\\",thisperson,"\\Dropbox\\ERRNIanalysis2016\\ERRNI outputs\\ID_backgds.xlsx",sep="")
+myoutputs=paste("C:\\Users\\",thisperson,"\\Dropbox\\ERRNIanalysis2016\\ERRNI outputs",sep="")
+mysep="\\"
+if (mymac==1){
+  thisperson='dorothybishop'
+  mysep="/"
+  myfolder=paste("/Users/",thisperson,"/Dropbox/ERRNIanalysis2016/ERRNI raw DATA/final_041116",sep="")
+  mybackfile=paste("/Users/",thisperson,"/Dropbox/ERRNIanalysis2016/ERRNI outputs/ID_backgds.xlsx",sep="")
+  myoutputs=paste("/Users/",thisperson,"/Dropbox/ERRNIanalysis2016/ERRNI outputs",sep="")
+}
+
+location_final<-myfolder
+myfinallist<-list.files(location_final) #NB the final raw data folder should ONLY contain included raw data files
+Nsub=length(myfinallist)
+
+setwd(myoutputs) #default is to write any newly created files to ERRNI outputs
+```
+
+
+```{r checkfiles}
+#extract age bands
+ageB <- substring(myfinallist,1,2)
+
+#######################################
+
+background_wb<-loadWorkbook(mybackfile)
+#backgroundy=data.frame(readWorksheet(background_wb,sheet=1))
+backgroundy=data.frame(readWorkbook(background_wb,sheet=1)) #version for openxlsx package
+
+#######################################
+#check files match
+match(backgroundy$ID,substring(toupper(myfinallist),1,7))
+
+
+#Before running code below select which story to run for "Fish or "beach"
+id_ly<-data.frame(IDold=myfinallist, ID=substring(toupper(myfinallist),1,7))
+
+id_er<-merge(id_ly,backgroundy,by="ID", all.x=T)
+
+id_er<-id_er[is.na(id_er$story)==FALSE,]
+
+```
+# Table 1
+
+```{r populate.table1}
+
+
+# create a blank table in R to populate with values
+tab1<-matrix(NA,14,6)
+tab1<-as.data.frame(tab1)
+
+#add table names (these are updated later)
+names(tab1)<-c("Age_Band", "N", "Beach_fish","Male_Female","TROG","No._recall")
+
+#populate column for age bands and N.
+tab1$Age_Band<-names(table(id_er$ageband))
+tab1$N<-table(id_er$ageband)
+
+#Run a loop to fill values for beach|fish counts, Male|Female counts, and TROG mean(SD). 
+for(i in 1:14){
+  
+  tab1$Beach_fish[i]<-paste(round(table(id_er$story[id_er$ageband==names(table(id_er$ageband))[i]])/sum(table(id_er$story[id_er$ageband==names(table(id_er$ageband))[i]]))*100),collapse = "|")
+  #
+  tab1$Male_Female[i]<-paste(round(table(id_er$sex[id_er$ageband==names(table(id_er$ageband))[i]])[2:1]/sum(table(id_er$sex[id_er$ageband==names(table(id_er$ageband))[i]])[2:1])*100),collapse = "|")
+  
+  tab1$TROG[i]<-paste(round(mean(id_er$TROG[id_er$ageband==names(table(id_er$ageband))[i]],na.rm=T),1)," (",round(sd(id_er$TROG[id_er$ageband==names(table(id_er$ageband))[i]],na.rm=T),1),")",sep = "")
+}
+```
+
+NB for next chunk, I was getting some errors:
+Error in match(sheetrId, file_rIds) : object 'sheetrId' not found.
+I remembered that these sometimes seemed confused between xlsx and xls.
+To open the raw file, need to change to xls and then resave as xlsx.
+
+This affected several files, e.g.; 0751x01, 0635H01
+I think these were ones that Pauline had processed: something incompatible about these.
+
+```{r no_narrative}
+
+#THis chunk then creates a list of the participants that did not produce a narrative
+recaller<-matrix(NA,ncol=2,nrow=Nsub)
+recaller<-as.data.frame(recaller)
+names(recaller)<-c("ID","N_recall")
+for(i in 1:Nsub){
+  
+  
+  myID=paste(location_final,myfinallist[i],sep=mysep)
+  
+  mytranscript=loadWorkbook(myID)
+
+  mytrans=data.frame(readWorkbook(mytranscript,sheet=1)) #changed from readWorksheet
+  mytrans$N.word=as.numeric(mytrans$N.word)#needed because in some files this is non-numeric!!
+  myagg=aggregate(mytrans$N.word~mytrans$TELL.RECALL, data=mytrans, FUN=function(x) c(mean=mean(x), count=length(x)))
+  norecall=0
+  aggrow=nrow(myagg)
+  if (aggrow<2){norecall=1} #exclude cases with zero recall
+  numbit=myagg[,2]#this is a matrix, not a number!
+  if(sum(numbit[,2])<10) {norecall=1} #  exclude cases with fewer than total of 10 utterances
+  if(mean(numbit[,1])<1.5){norecall=1} # exclude cases with MLU < 1.5 (only labelling)
+  recaller[i,1] <-substring(myfinallist[i],1,7)
+  recaller[i,2]<-norecall
+}
+```
+
+```{r changecase}
+#The ID columns are changed to upper case font so that they can be merged correctly.
+id_er$ID<-as.vector(unlist(lapply(id_er$ID, function(v) {
+  if (is.character(v)) return(toupper(v))
+  else return(v)
+})))
+
+recaller$ID<-as.vector(unlist(lapply(recaller$ID, function(v) {
+  if (is.character(v)) return(toupper(v))
+  else return(v)
+})))
+```
+#Merge data together, so that a summary column of percentage of "no narrative" participants by age can be added to Table 1.
+
+```{r merge}
+id_er2<-merge(id_er,recaller,by="ID")
+
+for(i in 1:14){
+  
+  tab1$No._recall[i]<-sum(id_er2$N_recall[id_er2$ageband==names(table(id_er2$ageband))[i]],na.rm=T)
+}
+
+
+```
+
+#Reorder table 1 so that younger age bands appear first.
+```{r reordertab}
+tab1<-tab1[c(9:14,1:8),]
+names(tab1)<-c("Age_Band", "N", "%Beach_fish","%Male_Female","TROG ss","N no narrative")
+#Write csv to file with data for table.
+write.csv(tab1,"table_1_errni.csv",row.names=F)
+
+```
+
+# Pirate plots Fig 1
+ NB loaded current version of yarrr in development via Github
+
+```{r makepirate}
+# Load data table
+
+summary_dat_wb<-loadWorkbook("~/Dropbox/ERRNIanalysis2016/ERRNI outputs/summary_allNov14_2016.xlsx")
+summary_dat=data.frame(readWorkbook(summary_dat_wb,sheet=1))
+
+#Load R package to produce pirate plots.
+#install.packages("yarrr")
+library("yarrr")
+
+summary_dat$ageband<-factor(summary_dat$ageband,levels=c( "4A", "4B", "4C", "4D", "5A", "5B","06", "07", "08", "09", "10", "12", "14", "17"))
+
+allexclude=which(summary_dat$allexclude==1)
+summary_dat=summary_dat[-allexclude,]
+tiff(file = "Figure 1_col.tiff", width = 3200, height = 3200, units = "px", res = 500)
+#par(xpd=T) #turned this off to avoid having distribution lines extending beyond axes
+
+pcol<-c("skyblue","dodgerblue","dodgerblue3","dodgerblue4","green","green4","pink","yellow","red","purple","orange","deeppink4","darkmagenta","brown")
+
+pirateplot(formula = avgmlu ~ ageband,
+           theme=0,
+           data = summary_dat,
+           xlab = "Age Band",
+           ylab = "MLUw",
+           main = "",
+           point.col=pcol,point.bg = pcol,
+           inf.f.o = .7,
+           avg.line.o = 1,
+           bar.f.o = .01,
+           bean.b.o = .1,
+           point.o = .2,
+           point.pch = 16,
+           back.col = gray(.99))
+# NB commands for this version of yarrr needed changing:
+#hdi.o to inf.f.o, line.o to avg.line.o , and bar.o to bar.f.o
+#dev.off()
+
+```
