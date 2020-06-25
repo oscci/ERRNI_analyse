@@ -460,11 +460,15 @@ write.csv(clauseprop_all,"clauseinstance_table.csv",row.names = FALSE)
 ################################################################################
 ```
 
+# Word count/MLU
+
 I've added here a bit of script to demonstrate doing a word count in R to get MLU.
 
 
 We'll just take a sample file in .csv format to show how it works.
-This has already had word count done, but we create another column, wordsN2, to redo it.
+This has already had word count done, but we create another column, wordsN2, to redo it.  
+
+Warning: the word count simply counts blanks; it may give errors if you have double blanks, or if words are demarcated some other way (e.g. if alternative versions of a word are both indicated).  
 
 ```{r readfile}
 mydir<-"~/Dropbox/ERRNIanalysis2016/ERRNI R scripts/MLU scripts"#demofile should be in this directory
