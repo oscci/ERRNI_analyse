@@ -6,9 +6,20 @@ output: html_notebook
 Notebook version of original analysis scripts for Frizelle et al.
 The original scripts were uploaded to OSF around Dec 2016 https://osf.io/6mwyk/
 
+NB from DVB, June 25 2020. This is pretty clunky!
+It is particularly inefficient because different stages repeatedly read in all the raw data files.  
+The sensible approach would be to read them in once, and then create a giant .csv file with all cases appended, after selecting the key columns (note that the columns in the original data files are consistently labelled, but inconsistent in terms of column numbering). This would create a classic longform file that could then be saved and reloaded for specific analyses.  
+
+I have also appended a short chunk showing automation of MLU count.
+
+# Original scripts
 We start with 'script for figures and plots v5'
 
-NB This assumes we already have the file summary_allNov14_2016.xlsx
+These are largely unmodified from originals, except I had problems with using XLConnect to read xlsx files with current version of R, so have substituted openxlsx.  
+
+In general, though, I'd strongly recommend saving files as .csv, because it we've found that importing direct from xlsx may not work on all machines or with all R versions.  
+
+NB The script assumes we already have the file summary_allNov14_2016.xlsx, which details background information - age group etc.
 
 # Script to produce information for Tables 1-3 and figs 2-3 (ERRNI data)
 Added to Github on 24 Jun 2020
@@ -16,6 +27,7 @@ Added to Github on 24 Jun 2020
 Script by Paul Thompson December2016
 Edited by Dorothy Bishop 21/12/16
 Added script to create Table 4 22/12/16  Included scripts for sequential analysis of proportions 22/12/16
+Modified by DVMB 24/06/20
 ```{r loadpackages}
 #library(XLConnect) - original scripts used XLConnect to read xls files
 #This is not working with current R version
@@ -447,3 +459,34 @@ write.csv(clauseprop_all,"clauseinstance_table.csv",row.names = FALSE)
 
 ################################################################################
 ```
+
+I've added here a bit of script to demonstrate doing a word count in R to get MLU.
+
+
+We'll just take a sample file in .csv format to show how it works.
+This has already had word count done, but we create another column, wordsN2, to redo it.
+
+```{r readfile}
+mydir<-"~/Dropbox/ERRNIanalysis2016/ERRNI R scripts/MLU scripts"#demofile should be in this directory
+
+    filename<-paste0(mydir,'/demofile.csv')
+    mytrans<-read.csv(filename,stringsAsFactors=F)
+    
+    #create wordsN2 as check on Nwords
+    mytrans$wordsN2 <- sapply(strsplit(mytrans$text, " "), length)
+  
+    #word count only for legitimate clauses; NA for others
+    legitlist <- c('m','t','a,','c','n','r','d') 
+    thisclauselist <- substring(mytrans$clause,1,1) #this takes first character of clause
+    #i.e. we include here subordinate clauses coded - and + in the word count
+    w <- which(thisclauselist %in% legitlist)
+    mytrans$wordsN2[-w]<-NA
+    
+    #For clause count, we only want main clauses
+    w2 <- which(mytrans$clause %in% legitlist )
+    
+    MLU <- sum(mytrans$wordsN2,na.rm=T)/length(w2)
+    
+```
+
+   
